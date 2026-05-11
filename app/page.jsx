@@ -282,14 +282,14 @@ function DashboardPage({ user, orders, allUsers }) {
   );
 }
 
-function BuyBundlesPage({ user, setUser, priceConfig, onOrder }) {
+function BuyBundlesPage({ user, setUser, priceConfig, onOrder, bundles }) {
   const [activeNetwork, setActiveNetwork] = useState("MTN");
   const [phone, setPhone] = useState("");
   const [selectedBundle, setSelectedBundle] = useState(null);
   const [msg, setMsg] = useState(null);
   const [confirming, setConfirming] = useState(false);
 
-  const bundles = BASE_BUNDLES.filter(b => b.network === activeNetwork);
+  const networkBundles = bundles.filter(b => b.network === activeNetwork);
   const multiplier = priceConfig[user.role] || 1.15;
   const getPrice = (base) => (base * multiplier).toFixed(2);
 
@@ -359,7 +359,7 @@ function BuyBundlesPage({ user, setUser, priceConfig, onOrder }) {
 
       {/* Bundle Grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px,1fr))", gap: 12, marginBottom: 20 }}>
-        {bundles.map(b => {
+        {networkBundles.map(b => {
           const price = getPrice(b.basePrice);
           const selected = selectedBundle?.id === b.id;
           return (
@@ -736,25 +736,185 @@ function PricingPage({ priceConfig, setPriceConfig }) {
   );
 }
 
-function BundlesPage() {
+function BundlesPage({ bundles, setBundles }) {
+  const EMPTY_FORM = { network: "MTN", size: "", basePrice: "" };
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState(EMPTY_FORM);
+  const [editId, setEditId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [msg, setMsg] = useState(null);
+
+  const flash = (text, type = "success") => {
+    setMsg({ text, type });
+    setTimeout(() => setMsg(null), 2500);
+  };
+
+  const addBundle = () => {
+    if (!addForm.size.trim()) { flash("Size is required.", "error"); return; }
+    const price = parseFloat(addForm.basePrice);
+    if (!price || price <= 0) { flash("Enter a valid base price.", "error"); return; }
+    const newBundle = {
+      id: genId(),
+      network: addForm.network,
+      size: addForm.size.trim(),
+      basePrice: price,
+    };
+    setBundles(prev => [...prev, newBundle]);
+    setAddForm(EMPTY_FORM);
+    setShowAdd(false);
+    flash("Bundle added successfully.");
+  };
+
+  const startEdit = (b) => {
+    setEditId(b.id);
+    setEditForm({ network: b.network, size: b.size, basePrice: String(b.basePrice) });
+  };
+
+  const saveEdit = () => {
+    if (!editForm.size.trim()) { flash("Size is required.", "error"); return; }
+    const price = parseFloat(editForm.basePrice);
+    if (!price || price <= 0) { flash("Enter a valid base price.", "error"); return; }
+    setBundles(prev => prev.map(b =>
+      b.id === editId
+        ? { ...b, network: editForm.network, size: editForm.size.trim(), basePrice: price }
+        : b
+    ));
+    setEditId(null);
+    flash("Bundle updated.");
+  };
+
+  const deleteBundle = (id) => {
+    setBundles(prev => prev.filter(b => b.id !== id));
+    flash("Bundle deleted.");
+  };
+
+  const inputStyle = {
+    padding: "7px 10px", border: "1px solid #d1d5db", borderRadius: 7,
+    fontSize: 13, boxSizing: "border-box",
+  };
+  const btnStyle = (variant) => ({
+    padding: "6px 13px", borderRadius: 7, cursor: "pointer",
+    fontWeight: 600, fontSize: 12, border: "none",
+    ...(variant === "primary" ? { background: "#7c3aed", color: "#fff" } :
+        variant === "danger"  ? { background: "#FEE2E2", color: "#991B1B" } :
+                                { background: "#f3f4f6", color: "#374151", border: "1px solid #e5e7eb" }),
+  });
+
   return (
     <div>
-      <p style={{ color: "#6b7280", marginBottom: 20, fontSize: 14 }}>All available bundles across networks.</p>
-      {NETWORKS.map(network => (
-        <div key={network} style={{ background: "#fff", borderRadius: 14, border: "1px solid #e5e7eb", padding: 20, marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-            <div style={{ background: NETWORK_COLORS[network]?.bg, color: NETWORK_COLORS[network]?.text, padding: "4px 14px", borderRadius: 20, fontWeight: 700, fontSize: 14 }}>{network}</div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 10 }}>
-            {BASE_BUNDLES.filter(b => b.network === network).map(b => (
-              <div key={b.id} style={{ background: "#f9fafb", borderRadius: 10, padding: "10px 14px", border: "1px solid #e5e7eb" }}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "#1a1a2e" }}>{b.size}</div>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>Base: ¢{b.basePrice.toFixed(2)}</div>
-              </div>
-            ))}
+      {msg && (
+        <div style={{
+          background: msg.type === "success" ? "#ECFDF5" : "#FEE2E2",
+          border: `1px solid ${msg.type === "success" ? "#6EE7B7" : "#FCA5A5"}`,
+          color: msg.type === "success" ? "#065F46" : "#991B1B",
+          padding: "10px 16px", borderRadius: 10, marginBottom: 16, fontSize: 13,
+        }}>{msg.text}</div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <span style={{ color: "#6b7280", fontSize: 14 }}>{bundles.length} bundles across {NETWORKS.length} networks</span>
+        <button onClick={() => { setShowAdd(true); setEditId(null); }} style={{
+          padding: "9px 18px", background: "linear-gradient(135deg,#7c3aed,#5b21b6)",
+          color: "#fff", border: "none", borderRadius: 9, fontWeight: 700, cursor: "pointer",
+        }}>+ Add Bundle</button>
+      </div>
+
+      {/* Add form */}
+      {showAdd && (
+        <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #e5e7eb", padding: 20, marginBottom: 20 }}>
+          <h4 style={{ margin: "0 0 14px", fontWeight: 700, fontSize: 15 }}>New Bundle</h4>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div>
+              <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>Network</label>
+              <select value={addForm.network} onChange={e => setAddForm(f => ({ ...f, network: e.target.value }))}
+                style={{ ...inputStyle, minWidth: 120 }}>
+                {NETWORKS.map(n => <option key={n}>{n}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>Size (e.g. 5 GB)</label>
+              <input value={addForm.size} onChange={e => setAddForm(f => ({ ...f, size: e.target.value }))}
+                placeholder="5 GB" style={{ ...inputStyle, width: 120 }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: "#6b7280", display: "block", marginBottom: 4 }}>Base Price (¢)</label>
+              <input type="number" min="0.01" step="0.01" value={addForm.basePrice}
+                onChange={e => setAddForm(f => ({ ...f, basePrice: e.target.value }))}
+                placeholder="21.00" style={{ ...inputStyle, width: 110 }} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={addBundle} style={btnStyle("primary")}>Add</button>
+              <button onClick={() => { setShowAdd(false); setAddForm(EMPTY_FORM); }} style={btnStyle("neutral")}>Cancel</button>
+            </div>
           </div>
         </div>
-      ))}
+      )}
+
+      {/* Bundles grouped by network */}
+      {NETWORKS.map(network => {
+        const netBundles = bundles.filter(b => b.network === network);
+        return (
+          <div key={network} style={{ background: "#fff", borderRadius: 14, border: "1px solid #e5e7eb", marginBottom: 16, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", borderBottom: "1px solid #f3f4f6" }}>
+              <div style={{ background: NETWORK_COLORS[network]?.bg, color: NETWORK_COLORS[network]?.text, padding: "4px 14px", borderRadius: 20, fontWeight: 700, fontSize: 14 }}>{network}</div>
+              <span style={{ color: "#9ca3af", fontSize: 13 }}>{netBundles.length} bundle{netBundles.length !== 1 ? "s" : ""}</span>
+            </div>
+
+            {netBundles.length === 0 ? (
+              <div style={{ padding: "20px", color: "#9ca3af", fontSize: 13 }}>No bundles for this network yet.</div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#f9fafb" }}>
+                    {["Size", "Base Price", "Actions"].map(h => (
+                      <th key={h} style={{ padding: "10px 16px", textAlign: "left", color: "#6b7280", fontWeight: 600, borderBottom: "1px solid #e5e7eb" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {netBundles.map(b => (
+                    <tr key={b.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                      {editId === b.id ? (
+                        <>
+                          <td style={{ padding: "10px 16px" }}>
+                            <input value={editForm.size} onChange={e => setEditForm(f => ({ ...f, size: e.target.value }))}
+                              style={{ ...inputStyle, width: 110 }} />
+                          </td>
+                          <td style={{ padding: "10px 16px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <span style={{ color: "#6b7280" }}>¢</span>
+                              <input type="number" min="0.01" step="0.01" value={editForm.basePrice}
+                                onChange={e => setEditForm(f => ({ ...f, basePrice: e.target.value }))}
+                                style={{ ...inputStyle, width: 90 }} />
+                            </div>
+                          </td>
+                          <td style={{ padding: "10px 16px" }}>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button onClick={saveEdit} style={btnStyle("primary")}>Save</button>
+                              <button onClick={() => setEditId(null)} style={btnStyle("neutral")}>Cancel</button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td style={{ padding: "10px 16px", fontWeight: 700, fontSize: 15, color: "#1a1a2e" }}>{b.size}</td>
+                          <td style={{ padding: "10px 16px", fontWeight: 600, color: "#7c3aed" }}>¢{b.basePrice.toFixed(2)}</td>
+                          <td style={{ padding: "10px 16px" }}>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button onClick={() => startEdit(b)} style={btnStyle("neutral")}>Edit</button>
+                              <button onClick={() => deleteBundle(b.id)} style={btnStyle("danger")}>Delete</button>
+                            </div>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -897,6 +1057,7 @@ export default function App() {
   const [authPage, setAuthPage] = useState("login"); // login | register
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState(INITIAL_USERS);
+  const [bundles, setBundles] = useState(BASE_BUNDLES);
   const [orders, setOrders] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [priceConfig, setPriceConfig] = useState(INITIAL_PRICE_CONFIG);
@@ -964,12 +1125,12 @@ export default function App() {
   const renderPage = () => {
     switch (activePage) {
       case "dashboard": return <DashboardPage user={currentUser} orders={orders} allUsers={users} />;
-      case "buy": return <BuyBundlesPage user={currentUser} setUser={setCurrentUser} priceConfig={priceConfig} onOrder={handleOrder} />;
+      case "buy": return <BuyBundlesPage user={currentUser} setUser={setCurrentUser} priceConfig={priceConfig} onOrder={handleOrder} bundles={bundles} />;
       case "orders": return <OrdersPage user={currentUser} orders={orders} />;
       case "wallet": return <WalletPage user={currentUser} setUser={setCurrentUser} transactions={transactions} onTopup={handleTopup} />;
       case "users": return currentUser.role === "superadmin" ? <UsersPage users={users} setUsers={setUsers} /> : null;
       case "pricing": return currentUser.role === "superadmin" ? <PricingPage priceConfig={priceConfig} setPriceConfig={setPriceConfig} /> : null;
-      case "bundles": return currentUser.role === "superadmin" ? <BundlesPage /> : null;
+      case "bundles": return currentUser.role === "superadmin" ? <BundlesPage bundles={bundles} setBundles={setBundles} /> : null;
       case "agents": return <OrdersPage user={currentUser} orders={orders} />;
       default: return <DashboardPage user={currentUser} orders={orders} allUsers={users} />;
     }

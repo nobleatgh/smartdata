@@ -1,1 +1,5 @@
-
+"homepage": "https://nobleatgh.github.io/smartdata/"
+"scripts": {
+  "predeploy": "npm run build",
+  "deploy": "gh-pages -d build"
+}
